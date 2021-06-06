@@ -9,6 +9,13 @@ import enLocale from "./locales/en";
  */
 export default class EagerForm {
   /**
+   * Version
+   *
+   * @type {String}
+   */
+  static version = '1.0.0';
+
+  /**
    * The prefix for data attributes
    *
    * @type {String}
@@ -56,16 +63,18 @@ export default class EagerForm {
     captureSubmit: true,
     disableSubmit: true,
     captureReset: true,
+    parentSelector: null,
     invalidFeedbackName: "div",
     invalidFeedbackPosition: "afterend",
-    invalidFeedbackClass: "invalid-feedback",
-    parentClass: "form-group",
+    invalidFeedbackSelector: ".invalid-feedback",
     classes: {
       formValidatedClass: "was-validated",
       inputValidClass: "is-valid",
       inputInvalidClass: "is-invalid",
-      parentValidClass: "input-valid",
-      parentInvalidClass: "input-invalid",
+      parentValidClass: "has-valid-input",
+      parentInvalidClass: "has-invalid-input",
+      invalidFeedbackClass: "invalid-feedback",
+      disabled: "disabled",
     },
   };
 
@@ -97,6 +106,7 @@ export default class EagerForm {
     // Whether currently focusing an invalid element or not
     this.isFocusing;
 
+    // Types of event that do not bubble
     this.unBubbledEvents = ['blur', 'focus'];
 
     // Merge with the default options
@@ -188,6 +198,12 @@ export default class EagerForm {
     }
   }
 
+  /**
+   * Add locale
+   *
+   * @param {String} name
+   * @param {Object} messages
+   */
   static addLocale(name, messages) {
     this.messages[name] = messages;
   }
@@ -203,6 +219,11 @@ export default class EagerForm {
     return this;
   }
 
+  /**
+   * Set/overwrite messages
+   *
+   * @param {Object} messages
+   */
   setMessages(messages) {
     EagerForm.messages[this.options.locale] = {
       ...EagerForm.messages[this.options.locale],
@@ -252,15 +273,35 @@ export default class EagerForm {
       this.form.classList.add(this.options.classes.formValidatedClass);
     }
 
-    let firstErrorElement = this.isValid();
+    let firstErrorElement = this.getFirstError();
 
     if (firstErrorElement) {
       event.preventDefault();
+
+      if (this.options.disableSubmit) {
+        this.disableSubmit();
+      }
 
       this.hightlightErrors(firstErrorElement);
     }
 
     this.complete();
+  }
+
+  /**
+   * Enable the submit button
+   */
+  enableSubmit() {
+    this.submitBtn.removeAttribute('disabled');
+    this.submitBtn.classList.remove(this.options.classes.disabled);
+  }
+
+  /**
+   * Disable the submit button
+   */
+  disableSubmit() {
+    this.submitBtn.setAttribute('disabled', 'disabled');
+    this.submitBtn.classList.add(this.options.classes.disabled);
   }
 
   /**
@@ -306,19 +347,30 @@ export default class EagerForm {
     }
   }
 
+  /**
+   * Fires an event after the validate() method is finished
+   *
+   */
   complete() {
-    let event = document.createEvent("Event");
-    event.initEvent("eager:done", true, true);
-    this.form.dispatchEvent(event);
+    this.form.dispatchEvent(new Event('eager:done', {bubbles: true}));
+  }
+
+  /**
+   * Get the first error element
+   *
+   * @return {Object} Returns the very first invalid element's object if found else null
+   */
+  getFirstError() {
+    return this.form.querySelector(":invalid");
   }
 
   /**
    * Checks if form is valid or not by checking if at least one invalid element is present
    *
-   * @return {Object} Returns the very first invalid element's object if found else null
+   * @return {Boolean}
    */
   isValid() {
-    return this.form.querySelector(":invalid");
+    return this.getFirstError() == null;
   }
 
   /**
@@ -327,6 +379,12 @@ export default class EagerForm {
    * @param  {Object} event
    */
   handleInput(event) {
+    let cancelled = ! event.target.dispatchEvent(new Event('eager:before-validate', {bubbles: true}));
+
+    if (cancelled) {
+      return;
+    }
+
     // Ignore if explicitly told
     // meaning, the novalidate attribute exists, and it's value is not false
     // any other value (even empty no value) will be treated as true
@@ -337,6 +395,13 @@ export default class EagerForm {
     // Don't validate on intial tabbed switch (if enabled)
     if (this.options.noTriggerOnTab && event.keyCode && event.keyCode == 9) {
       return;
+    }
+
+    // On a form change, enable the submit button back
+    if (event.type == 'change' && this.options.disableSubmit) {
+      if (this.isValid()) {
+        this.enableSubmit();
+      }
     }
 
     // Bind this to callback
@@ -389,26 +454,21 @@ export default class EagerForm {
     } else {
       callback(event.target);
     }
+
+    event.target.dispatchEvent(new Event('eager:after-validate', {bubbles: true}));
   }
 
   /**
    * Validates a field
    *
    * @param  {Object} element
-   * @return {[type]}
    */
   validateField(element) {
-    // Make sure the element is a valid input element
-    if (
-      element instanceof window.HTMLButtonElement ||
-      element instanceof window.HTMLTextAreaElement ||
-      element instanceof window.HTMLSelectElement ||
-      element instanceof window.HTMLInputElement
-    ) {
-    } else {
+    // Make sure the element is supported by HTML5 constraints
+    // Also skip any button, submit or reset elements
+    if (!element.checkValidity || ['button', 'submit', 'reset'].includes(element.type)) {
       return;
     }
-
     // Determiner for default native error
     let hasDefaultError = false;
     let hasCustomError = false;
@@ -488,7 +548,7 @@ export default class EagerForm {
     element.classList.remove(this.options.classes.inputValidClass);
 
     // Find the parent element
-    let parent = element.closest("." + this.options.parentClass);
+    let parent = this.findParent(element);
 
     if (parent) {
       // Parent exists, so add the invalid classe
@@ -523,13 +583,11 @@ export default class EagerForm {
    * @param {String} validityType The validity type from ValidityState
    */
   displayError(element, validityType) {
-    let parent = element.closest("." + this.options.parentClass);
+    let parent = this.findParent(element);
     let errorMessage = this.getMessage(element, validityType);
 
     if (parent) {
-      let feedBackElement = parent.querySelector(
-        "." + this.options.invalidFeedbackClass
-      );
+      let feedBackElement = parent.querySelector(this.options.invalidFeedbackSelector);
 
       // Already created, or manually set by the DOM, so just set the error and be done with it
       if (feedBackElement) {
@@ -543,7 +601,7 @@ export default class EagerForm {
         let errorContainer = document.createElement(
           this.options.invalidFeedbackName
         );
-        errorContainer.className = this.options.invalidFeedbackClass;
+        errorContainer.className = this.options.classes.invalidFeedbackClass;
         errorContainer.textContent = errorMessage;
         errorContainer.setAttribute('aria-live', 'polite');
         element.insertAdjacentElement(
@@ -691,7 +749,7 @@ export default class EagerForm {
    * @param  {Object} element
    */
   clearError(element) {
-    let parent = element.closest("." + this.options.parentClass);
+    let parent = this.findParent(element);
 
     element.classList.remove(this.options.classes.inputInvalidClass);
 
@@ -702,9 +760,7 @@ export default class EagerForm {
 
       parent.classList.remove(this.options.classes.parentInvalidClass);
 
-      let feedBackElement = parent.querySelector(
-        "." + this.options.invalidFeedbackClass
-      );
+      let feedBackElement = parent.querySelector(this.options.invalidFeedbackSelector);
 
       // Clear any invalid feedback
       if (feedBackElement) {
@@ -743,7 +799,7 @@ export default class EagerForm {
       this.options.classes.inputValidClass
     );
 
-    let parent = element.closest("." + this.options.parentClass);
+    let parent = this.findParent(element);
 
     // Make sure parent exists
     if (parent) {
@@ -754,9 +810,7 @@ export default class EagerForm {
       );
 
       // Find the feedback element
-      let feedBackElement = parent.querySelector(
-        "." + this.options.invalidFeedbackClass
-      );
+      let feedBackElement = parent.querySelector(this.options.invalidFeedbackSelector);
 
       // Clear any invalid feedback
       if (feedBackElement) {
@@ -772,6 +826,10 @@ export default class EagerForm {
    */
   restoreState() {
     this.form.classList.remove(this.options.classes.formValidatedClass);
+
+    if (this.options.disableSubmit) {
+      this.enableSubmit();
+    }
 
     Array.prototype.filter.call(this.form.elements, (element) => {
       this.clearValidation(element);
@@ -794,6 +852,20 @@ export default class EagerForm {
   }
 
   /**
+   * Find the parent element, if parent class is specified, use that, or simply return the parentNode
+   *
+   * @param  {Object} element
+   * @return {Object}
+   */
+  findParent(element) {
+    if (this.options.parentSelector) {
+      return element.closest(this.options.parentSelector);
+    }
+
+    return element.parentNode;
+  }
+
+  /**
    * Translate a key
    *
    * @param  {String} key
@@ -808,6 +880,13 @@ export default class EagerForm {
     return fallback;
   }
 
+  /**
+   * Perform basic string templating
+   *
+   * @param  {String} text
+   * @param  {Object} replacements
+   * @return {String}
+   */
   static strtpl(text, replacements) {
     text = text.replace(
       /\{(\s*?[\w.]+\s*?)}/gm,

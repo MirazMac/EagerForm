@@ -1,4 +1,6 @@
 export default function (element, attribute) {
+  let msg = this.translate("valueNotEqual");
+  
   return new Promise((resolve, reject) => {
     if (
       element.value ===
@@ -6,7 +8,7 @@ export default function (element, attribute) {
     ) {
       resolve();
     } else {
-      reject("The values don't match");
+      reject(msg);
     }
   });
 }

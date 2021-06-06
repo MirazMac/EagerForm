@@ -16,4 +16,5 @@ export default {
   rangeUnderflow: "Please enter a value that is no less than {min}.",
   stepMismatch: "Please provide a valid value",
   remoteInvalid: "The field doesn't pass remote validation.",
+  valueNotEqual: "The values don't match",
 };
