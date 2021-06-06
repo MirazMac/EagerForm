@@ -39,7 +39,7 @@
 
           <div class="form-group mb-3">
             <label for="text" class="form-label">Custom Rule (Confirm Password) with inline error message</label>
-            <input type="text" name="text_2" id="text_2" class="form-control" data-eager-match="#password" required="" data-eager-match-error="Passwords should be the same">
+            <input type="text" name="text_2" id="text_2" class="form-control" data-eager-match="#password" required="">
           </div>
 
           <div class="form-group mb-3">
@@ -53,6 +53,11 @@
           <div class="form-group mb-3">
             <label for="search" class="form-label">Search</label>
             <input type="search" name="search" id="search" class="form-control" required>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="remote" class="form-label">Remote</label>
+            <input type="text" name="remote" id="remote" class="form-control" data-eager-remote="https://httpbin.org/status/200" data-eager-debounce="600" required>
           </div>
 
           <div class="form-group mb-3">

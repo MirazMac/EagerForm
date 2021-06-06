@@ -64,15 +64,6 @@ const makeConfig = (env = 'development') => {
       babel({
         babelHelpers: 'runtime',
         exclude: ['node_modules/**']
-      }),
-      serve({
-        open: true,
-        contentBase: ['.', 'playground'],
-        host: 'localhost',
-        port: 9000,
-      }),
-      livereload({
-        watch: ['dist', 'playground']
       })
     ]
   };
@@ -83,6 +74,18 @@ const makeConfig = (env = 'development') => {
         comments: /^!/
       }
     }));
+  } else {
+    config.plugins.push(
+      serve({
+        open: true,
+        contentBase: ['.', 'playground'],
+        host: 'localhost',
+        port: 9000,
+      }));
+    config.plugins.push(
+      livereload({
+        watch: ['dist', 'playground']
+      }));
   }
 
   return config;
