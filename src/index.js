@@ -60,6 +60,7 @@ export default class EagerForm {
     debounce: {
       blur: 100,
     },
+    validateWithoutName: false,
     captureSubmit: true,
     disableSubmit: true,
     captureReset: true,
@@ -92,13 +93,6 @@ export default class EagerForm {
 
     // Try to find the submit button
     this.submitBtn = this.form.querySelector('[type="submit"]');
-
-    // The elements to be selected by this.getSiblings
-    this.selectorElement = "input, select, textarea";
-
-    // The selector expression used by this.getSiblings
-    this.selector =
-      ':input:not([type="hidden"]):not([type="submit"]):not([type="reset"]):not(button)';
 
     // To store settimeouts
     this.intervals = {};
@@ -385,13 +379,6 @@ export default class EagerForm {
       return;
     }
 
-    // Ignore if explicitly told
-    // meaning, the novalidate attribute exists, and it's value is not false
-    // any other value (even empty no value) will be treated as true
-    if (event.target.hasAttribute('novalidate') && event.target.getAttribute('novalidate') != "false") {
-      return;
-    }
-
     // Don't validate on intial tabbed switch (if enabled)
     if (this.options.noTriggerOnTab && event.keyCode && event.keyCode == 9) {
       return;
@@ -469,6 +456,19 @@ export default class EagerForm {
     if (!element.checkValidity || ['button', 'submit', 'reset'].includes(element.type)) {
       return;
     }
+
+    // Ignore if explicitly told
+    // meaning, the novalidate attribute exists, and it's value is not false
+    // any other value (even empty no value) will be treated as true
+    if (element.hasAttribute('novalidate') && element.getAttribute('novalidate') != "false") {
+      return;
+    }
+
+    // Ignore element without name unless told otherwise
+    if (!this.options.validateWithoutName && !element.getAttribute('name')) {
+      return;
+    }
+
     // Determiner for default native error
     let hasDefaultError = false;
     let hasCustomError = false;
@@ -556,8 +556,8 @@ export default class EagerForm {
       // Also remove the valid class from parent
       parent.classList.remove(this.options.classes.parentValidClass);
 
-      // Since, parent exists, let's find sibling inputs within the parent
-      let siblings = this.getSiblings(parent);
+      // Set validation status to same named inputs (usually checkboxes/radios)
+      let siblings = parent.querySelectorAll(`[name=${element.getAttribute('name')}]`);
 
       if (siblings.length > 1) {
         // Loop through the siblings to add appropriate classes, this is useful for checkboxes and radios
@@ -722,28 +722,6 @@ export default class EagerForm {
   }
 
   /**
-   * Get sibling input elements of a target
-   *
-   * @param  {Object} target
-   * @return {Array}
-   */
-  getSiblings(target) {
-    let elements = this.selectorElement.split(",");
-    let selector = this.selector.split(":input")[1];
-    let items = [];
-
-    for (let i = 0; i < elements.length; i++) {
-      target.querySelectorAll(elements[i].trim() + selector).forEach((el) => {
-        if (el.offsetParent !== null) {
-          items.push(el);
-        }
-      });
-    }
-
-    return items;
-  }
-
-  /**
    * Clear errors from an element
    *
    * @param  {Object} element
@@ -767,7 +745,8 @@ export default class EagerForm {
         feedBackElement.textContent = "";
       }
 
-      let siblings = this.getSiblings(parent);
+      // Clear validation status from same named inputs (usually checkboxes/radios)
+      let siblings = parent.querySelectorAll(`[name=${element.getAttribute('name')}]`);
 
       if (siblings.length > 1) {
         for (let index = 0; index < siblings.length; index++) {
@@ -858,10 +837,17 @@ export default class EagerForm {
    * @return {Object}
    */
   findParent(element) {
+    let parent;
+    // Try to match the parent
     if (this.options.parentSelector) {
-      return element.closest(this.options.parentSelector);
+      parent = element.closest(this.options.parentSelector);
     }
 
+    if (parent) {
+      return parent;
+    }
+
+    // fallback to parentNode in case of missing node/selector
     return element.parentNode;
   }
 
