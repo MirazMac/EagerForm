@@ -68,6 +68,8 @@ const makeConfig = (env = 'development') => {
     ]
   };
 
+  console.log(env);
+
   if (env === 'production') {
     config.plugins.push(terser({
       output: {
@@ -92,13 +94,13 @@ const makeConfig = (env = 'development') => {
 };
 
 export default commandLineArgs => {
-  const configs = [
-    makeConfig()
-  ];
+  let configs;
 
   // Production
   if (commandLineArgs.environment === 'BUILD:production') {
-    configs.push(makeConfig('production'));
+    configs = makeConfig('production');
+  } else {
+    configs = makeConfig();
   }
 
   return configs;

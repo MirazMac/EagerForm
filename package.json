@@ -1,6 +1,6 @@
 {
   "name": "@mirazmac/eagerform",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A vanilla javascript form validation library based on HTML5 constraints with support for custom rules, messages and localizations.",
   "main": "dist/EagerForm.umd.min.js",
   "module": "dist/EagerForm.esm.min.js",
@@ -16,8 +16,7 @@
     "test": "jest --config jest.config.js",
     "test:watch": "npm run test -- --watch",
     "test:coverage": "npm run test -- --coverage",
-    "clean": "rimraf dist coverage",
-    "prepare": "npm-run-all clean lint test build"
+    "clean": "rimraf dist coverage"
   },
   "repository": {
     "type": "git",

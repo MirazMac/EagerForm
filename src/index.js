@@ -13,7 +13,7 @@ export default class EagerForm {
    *
    * @type {String}
    */
-  static version = '1.0.0';
+  static version = '1.0.1';
 
   /**
    * The prefix for data attributes
