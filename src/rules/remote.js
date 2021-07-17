@@ -9,8 +9,8 @@
  * @return {Promise}
  */
 export default function (element, attribute) {
-  let endpoint = element
-    .getAttribute(attribute)
+  let endpoint = decodeURIComponent(element
+    .getAttribute(attribute))
     .replace("{value}", element.value);
 
   let reverse =
