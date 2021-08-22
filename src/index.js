@@ -575,7 +575,7 @@ export default class EagerForm {
             parent.classList.remove(this.options.classes.parentValidClass);
 
             // Set validation status to same named inputs (usually checkboxes/radios)
-            let siblings = parent.querySelectorAll(`[name=${element.getAttribute('name')}]`);
+            let siblings = parent.querySelectorAll(`[name="${element.getAttribute('name')}"]`);
 
             if (siblings.length > 1) {
                 // Loop through the siblings to add appropriate classes, this is useful for checkboxes and radios
@@ -764,7 +764,7 @@ export default class EagerForm {
             }
 
             // Clear validation status from same named inputs (usually checkboxes/radios)
-            let siblings = parent.querySelectorAll(`[name=${element.getAttribute('name')}]`);
+            let siblings = parent.querySelectorAll(`[name="${element.getAttribute('name')}"]`);
 
             if (siblings.length > 1) {
                 for (let index = 0; index < siblings.length; index++) {

@@ -2,7 +2,7 @@
  * @mirazmac/eagerform
  * A vanilla javascript form validation library based on HTML5 constraints with support for custom rules, messages and localizations.
  *
- * @version v1.0.1
+ * @version v1.0.2
  * @author Miraz Mac <mirazmac@gmail.com> (https://github.com/MirazMac)
  * @homepage https://github.com/MirazMac/EagerForm
  * @repository https://github.com/MirazMac/EagerForm
@@ -2976,7 +2976,7 @@
 
 	      parent.classList.remove(this.options.classes.parentValidClass); // Set validation status to same named inputs (usually checkboxes/radios)
 
-	      let siblings = parent.querySelectorAll("[name=".concat(element.getAttribute('name'), "]"));
+	      let siblings = parent.querySelectorAll("[name=\"".concat(element.getAttribute('name'), "\"]"));
 
 	      if (siblings.length > 1) {
 	        // Loop through the siblings to add appropriate classes, this is useful for checkboxes and radios
@@ -3141,7 +3141,7 @@
 	      } // Clear validation status from same named inputs (usually checkboxes/radios)
 
 
-	      let siblings = parent.querySelectorAll("[name=".concat(element.getAttribute('name'), "]"));
+	      let siblings = parent.querySelectorAll("[name=\"".concat(element.getAttribute('name'), "\"]"));
 
 	      if (siblings.length > 1) {
 	        for (let index = 0; index < siblings.length; index++) {
@@ -3275,7 +3275,7 @@
 
 	} // Register default locale
 
-	_defineProperty(EagerForm, "version", '1.0.1');
+	_defineProperty(EagerForm, "version", '1.0.2');
 
 	_defineProperty(EagerForm, "RULE_PREFIX", "eager");
 
