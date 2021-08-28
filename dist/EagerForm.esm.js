@@ -2,7 +2,7 @@
  * @mirazmac/eagerform
  * A vanilla javascript form validation library based on HTML5 constraints with support for custom rules, messages and localizations.
  *
- * @version v1.0.2
+ * @version v1.0.3
  * @author Miraz Mac <mirazmac@gmail.com> (https://github.com/MirazMac)
  * @homepage https://github.com/MirazMac/EagerForm
  * @repository https://github.com/MirazMac/EagerForm
@@ -3269,7 +3269,7 @@ class EagerForm {
 
 } // Register default locale
 
-_defineProperty(EagerForm, "version", '1.0.2');
+_defineProperty(EagerForm, "version", '1.0.3');
 
 _defineProperty(EagerForm, "RULE_PREFIX", "eager");
 

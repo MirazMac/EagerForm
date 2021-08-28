@@ -13,7 +13,7 @@ export default class EagerForm {
      *
      * @type {String}
      */
-    static version = '1.0.3';
+    static version = '1.0.4';
 
     /**
      * The prefix for data attributes
@@ -271,6 +271,7 @@ export default class EagerForm {
 
         if (firstErrorElement) {
             event.preventDefault();
+            event.stopPropagation();
 
             if (this.options.disableSubmit) {
                 this.disableSubmit();
