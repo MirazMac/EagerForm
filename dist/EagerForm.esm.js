@@ -2,13 +2,27 @@
  * @mirazmac/eagerform
  * A vanilla javascript form validation library based on HTML5 constraints with support for custom rules, messages and localizations.
  *
- * @version v1.0.3
+ * @version v1.0.4
  * @author Miraz Mac <mirazmac@gmail.com> (https://github.com/MirazMac)
  * @homepage https://github.com/MirazMac/EagerForm
  * @repository https://github.com/MirazMac/EagerForm
  * @license MIT
  */
 (function(l, r) { if (l.getElementById('livereloadscript')) return; r = l.createElement('script'); r.async = 1; r.src = '//' + (window.location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1'; r.id = 'livereloadscript'; l.getElementsByTagName('head')[0].appendChild(r) })(window.document);
+var fails = function (exec) {
+  try {
+    return !!exec();
+  } catch (error) {
+    return true;
+  }
+};
+
+// Detect IE8's incomplete defineProperty implementation
+var descriptors = !fails(function () {
+  // eslint-disable-next-line es/no-object-defineproperty -- required for testing
+  return Object.defineProperty({}, 1, { get: function () { return 7; } })[1] != 7;
+});
+
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
 function createCommonjsModule(fn) {
@@ -31,45 +45,149 @@ var global$1 =
   // eslint-disable-next-line no-new-func -- fallback
   (function () { return this; })() || Function('return this')();
 
-var fails = function (exec) {
-  try {
-    return !!exec();
-  } catch (error) {
-    return true;
-  }
+var replacement = /#|\.prototype\./;
+
+var isForced = function (feature, detection) {
+  var value = data[normalize(feature)];
+  return value == POLYFILL ? true
+    : value == NATIVE ? false
+    : typeof detection == 'function' ? fails(detection)
+    : !!detection;
 };
 
-// Detect IE8's incomplete defineProperty implementation
-var descriptors = !fails(function () {
-  // eslint-disable-next-line es/no-object-defineproperty -- required for testing
-  return Object.defineProperty({}, 1, { get: function () { return 7; } })[1] != 7;
+var normalize = isForced.normalize = function (string) {
+  return String(string).replace(replacement, '.').toLowerCase();
+};
+
+var data = isForced.data = {};
+var NATIVE = isForced.NATIVE = 'N';
+var POLYFILL = isForced.POLYFILL = 'P';
+
+var isForced_1 = isForced;
+
+var isObject = function (it) {
+  return typeof it === 'object' ? it !== null : typeof it === 'function';
+};
+
+var anObject = function (it) {
+  if (!isObject(it)) {
+    throw TypeError(String(it) + ' is not an object');
+  } return it;
+};
+
+var aPossiblePrototype = function (it) {
+  if (!isObject(it) && it !== null) {
+    throw TypeError("Can't set " + String(it) + ' as a prototype');
+  } return it;
+};
+
+/* eslint-disable no-proto -- safe */
+
+// `Object.setPrototypeOf` method
+// https://tc39.es/ecma262/#sec-object.setprototypeof
+// Works with __proto__ only. Old v8 can't work with null proto objects.
+// eslint-disable-next-line es/no-object-setprototypeof -- safe
+var objectSetPrototypeOf = Object.setPrototypeOf || ('__proto__' in {} ? function () {
+  var CORRECT_SETTER = false;
+  var test = {};
+  var setter;
+  try {
+    // eslint-disable-next-line es/no-object-getownpropertydescriptor -- safe
+    setter = Object.getOwnPropertyDescriptor(Object.prototype, '__proto__').set;
+    setter.call(test, []);
+    CORRECT_SETTER = test instanceof Array;
+  } catch (error) { /* empty */ }
+  return function setPrototypeOf(O, proto) {
+    anObject(O);
+    aPossiblePrototype(proto);
+    if (CORRECT_SETTER) setter.call(O, proto);
+    else O.__proto__ = proto;
+    return O;
+  };
+}() : undefined);
+
+// makes subclassing work correct for wrapped built-ins
+var inheritIfRequired = function ($this, dummy, Wrapper) {
+  var NewTarget, NewTargetPrototype;
+  if (
+    // it can work only with native `setPrototypeOf`
+    objectSetPrototypeOf &&
+    // we haven't completely correct pre-ES6 way for getting `new.target`, so use this
+    typeof (NewTarget = dummy.constructor) == 'function' &&
+    NewTarget !== Wrapper &&
+    isObject(NewTargetPrototype = NewTarget.prototype) &&
+    NewTargetPrototype !== Wrapper.prototype
+  ) objectSetPrototypeOf($this, NewTargetPrototype);
+  return $this;
+};
+
+var document$1 = global$1.document;
+// typeof document.createElement is 'object' in old IE
+var EXISTS = isObject(document$1) && isObject(document$1.createElement);
+
+var documentCreateElement = function (it) {
+  return EXISTS ? document$1.createElement(it) : {};
+};
+
+// Thank's IE8 for his funny defineProperty
+var ie8DomDefine = !descriptors && !fails(function () {
+  // eslint-disable-next-line es/no-object-defineproperty -- requied for testing
+  return Object.defineProperty(documentCreateElement('div'), 'a', {
+    get: function () { return 7; }
+  }).a != 7;
 });
 
-var $propertyIsEnumerable = {}.propertyIsEnumerable;
-// eslint-disable-next-line es/no-object-getownpropertydescriptor -- safe
-var getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+// `ToPrimitive` abstract operation
+// https://tc39.es/ecma262/#sec-toprimitive
+// instead of the ES6 spec version, we didn't implement @@toPrimitive case
+// and the second argument - flag - preferred type is a string
+var toPrimitive = function (input, PREFERRED_STRING) {
+  if (!isObject(input)) return input;
+  var fn, val;
+  if (PREFERRED_STRING && typeof (fn = input.toString) == 'function' && !isObject(val = fn.call(input))) return val;
+  if (typeof (fn = input.valueOf) == 'function' && !isObject(val = fn.call(input))) return val;
+  if (!PREFERRED_STRING && typeof (fn = input.toString) == 'function' && !isObject(val = fn.call(input))) return val;
+  throw TypeError("Can't convert object to primitive value");
+};
 
-// Nashorn ~ JDK8 bug
-var NASHORN_BUG = getOwnPropertyDescriptor && !$propertyIsEnumerable.call({ 1: 2 }, 1);
+// eslint-disable-next-line es/no-object-defineproperty -- safe
+var $defineProperty = Object.defineProperty;
 
-// `Object.prototype.propertyIsEnumerable` method implementation
-// https://tc39.es/ecma262/#sec-object.prototype.propertyisenumerable
-var f = NASHORN_BUG ? function propertyIsEnumerable(V) {
-  var descriptor = getOwnPropertyDescriptor(this, V);
-  return !!descriptor && descriptor.enumerable;
-} : $propertyIsEnumerable;
+// `Object.defineProperty` method
+// https://tc39.es/ecma262/#sec-object.defineproperty
+var f = descriptors ? $defineProperty : function defineProperty(O, P, Attributes) {
+  anObject(O);
+  P = toPrimitive(P, true);
+  anObject(Attributes);
+  if (ie8DomDefine) try {
+    return $defineProperty(O, P, Attributes);
+  } catch (error) { /* empty */ }
+  if ('get' in Attributes || 'set' in Attributes) throw TypeError('Accessors not supported');
+  if ('value' in Attributes) O[P] = Attributes.value;
+  return O;
+};
 
-var objectPropertyIsEnumerable = {
+var objectDefineProperty = {
 	f: f
 };
 
-var createPropertyDescriptor = function (bitmap, value) {
-  return {
-    enumerable: !(bitmap & 1),
-    configurable: !(bitmap & 2),
-    writable: !(bitmap & 4),
-    value: value
-  };
+// `RequireObjectCoercible` abstract operation
+// https://tc39.es/ecma262/#sec-requireobjectcoercible
+var requireObjectCoercible = function (it) {
+  if (it == undefined) throw TypeError("Can't call method on " + it);
+  return it;
+};
+
+// `ToObject` abstract operation
+// https://tc39.es/ecma262/#sec-toobject
+var toObject = function (argument) {
+  return Object(requireObjectCoercible(argument));
+};
+
+var hasOwnProperty = {}.hasOwnProperty;
+
+var has = Object.hasOwn || function hasOwn(it, key) {
+  return hasOwnProperty.call(toObject(it), key);
 };
 
 var toString = {}.toString;
@@ -89,13 +207,6 @@ var indexedObject = fails(function () {
   return classofRaw(it) == 'String' ? split.call(it, '') : Object(it);
 } : Object;
 
-// `RequireObjectCoercible` abstract operation
-// https://tc39.es/ecma262/#sec-requireobjectcoercible
-var requireObjectCoercible = function (it) {
-  if (it == undefined) throw TypeError("Can't call method on " + it);
-  return it;
-};
-
 // toObject with fallback for non-array-like ES3 strings
 
 
@@ -104,94 +215,112 @@ var toIndexedObject = function (it) {
   return indexedObject(requireObjectCoercible(it));
 };
 
-var isObject = function (it) {
-  return typeof it === 'object' ? it !== null : typeof it === 'function';
+var ceil = Math.ceil;
+var floor = Math.floor;
+
+// `ToInteger` abstract operation
+// https://tc39.es/ecma262/#sec-tointeger
+var toInteger = function (argument) {
+  return isNaN(argument = +argument) ? 0 : (argument > 0 ? floor : ceil)(argument);
 };
 
-// `ToPrimitive` abstract operation
-// https://tc39.es/ecma262/#sec-toprimitive
-// instead of the ES6 spec version, we didn't implement @@toPrimitive case
-// and the second argument - flag - preferred type is a string
-var toPrimitive = function (input, PREFERRED_STRING) {
-  if (!isObject(input)) return input;
-  var fn, val;
-  if (PREFERRED_STRING && typeof (fn = input.toString) == 'function' && !isObject(val = fn.call(input))) return val;
-  if (typeof (fn = input.valueOf) == 'function' && !isObject(val = fn.call(input))) return val;
-  if (!PREFERRED_STRING && typeof (fn = input.toString) == 'function' && !isObject(val = fn.call(input))) return val;
-  throw TypeError("Can't convert object to primitive value");
+var min = Math.min;
+
+// `ToLength` abstract operation
+// https://tc39.es/ecma262/#sec-tolength
+var toLength = function (argument) {
+  return argument > 0 ? min(toInteger(argument), 0x1FFFFFFFFFFFFF) : 0; // 2 ** 53 - 1 == 9007199254740991
 };
 
-// `ToObject` abstract operation
-// https://tc39.es/ecma262/#sec-toobject
-var toObject = function (argument) {
-  return Object(requireObjectCoercible(argument));
+var max = Math.max;
+var min$1 = Math.min;
+
+// Helper for a popular repeating case of the spec:
+// Let integer be ? ToInteger(index).
+// If integer < 0, let result be max((length + integer), 0); else let result be min(integer, length).
+var toAbsoluteIndex = function (index, length) {
+  var integer = toInteger(index);
+  return integer < 0 ? max(integer + length, 0) : min$1(integer, length);
 };
 
-var hasOwnProperty = {}.hasOwnProperty;
-
-var has = Object.hasOwn || function hasOwn(it, key) {
-  return hasOwnProperty.call(toObject(it), key);
+// `Array.prototype.{ indexOf, includes }` methods implementation
+var createMethod = function (IS_INCLUDES) {
+  return function ($this, el, fromIndex) {
+    var O = toIndexedObject($this);
+    var length = toLength(O.length);
+    var index = toAbsoluteIndex(fromIndex, length);
+    var value;
+    // Array#includes uses SameValueZero equality algorithm
+    // eslint-disable-next-line no-self-compare -- NaN check
+    if (IS_INCLUDES && el != el) while (length > index) {
+      value = O[index++];
+      // eslint-disable-next-line no-self-compare -- NaN check
+      if (value != value) return true;
+    // Array#indexOf ignores holes, Array#includes - not
+    } else for (;length > index; index++) {
+      if ((IS_INCLUDES || index in O) && O[index] === el) return IS_INCLUDES || index || 0;
+    } return !IS_INCLUDES && -1;
+  };
 };
 
-var document$1 = global$1.document;
-// typeof document.createElement is 'object' in old IE
-var EXISTS = isObject(document$1) && isObject(document$1.createElement);
-
-var documentCreateElement = function (it) {
-  return EXISTS ? document$1.createElement(it) : {};
+var arrayIncludes = {
+  // `Array.prototype.includes` method
+  // https://tc39.es/ecma262/#sec-array.prototype.includes
+  includes: createMethod(true),
+  // `Array.prototype.indexOf` method
+  // https://tc39.es/ecma262/#sec-array.prototype.indexof
+  indexOf: createMethod(false)
 };
 
-// Thank's IE8 for his funny defineProperty
-var ie8DomDefine = !descriptors && !fails(function () {
-  // eslint-disable-next-line es/no-object-defineproperty -- requied for testing
-  return Object.defineProperty(documentCreateElement('div'), 'a', {
-    get: function () { return 7; }
-  }).a != 7;
-});
+var hiddenKeys = {};
 
-// eslint-disable-next-line es/no-object-getownpropertydescriptor -- safe
-var $getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+var indexOf = arrayIncludes.indexOf;
 
-// `Object.getOwnPropertyDescriptor` method
-// https://tc39.es/ecma262/#sec-object.getownpropertydescriptor
-var f$1 = descriptors ? $getOwnPropertyDescriptor : function getOwnPropertyDescriptor(O, P) {
-  O = toIndexedObject(O);
-  P = toPrimitive(P, true);
-  if (ie8DomDefine) try {
-    return $getOwnPropertyDescriptor(O, P);
-  } catch (error) { /* empty */ }
-  if (has(O, P)) return createPropertyDescriptor(!objectPropertyIsEnumerable.f.call(O, P), O[P]);
+
+var objectKeysInternal = function (object, names) {
+  var O = toIndexedObject(object);
+  var i = 0;
+  var result = [];
+  var key;
+  for (key in O) !has(hiddenKeys, key) && has(O, key) && result.push(key);
+  // Don't enum bug & hidden keys
+  while (names.length > i) if (has(O, key = names[i++])) {
+    ~indexOf(result, key) || result.push(key);
+  }
+  return result;
 };
 
-var objectGetOwnPropertyDescriptor = {
+// IE8- don't enum bug keys
+var enumBugKeys = [
+  'constructor',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  'toString',
+  'valueOf'
+];
+
+var hiddenKeys$1 = enumBugKeys.concat('length', 'prototype');
+
+// `Object.getOwnPropertyNames` method
+// https://tc39.es/ecma262/#sec-object.getownpropertynames
+// eslint-disable-next-line es/no-object-getownpropertynames -- safe
+var f$1 = Object.getOwnPropertyNames || function getOwnPropertyNames(O) {
+  return objectKeysInternal(O, hiddenKeys$1);
+};
+
+var objectGetOwnPropertyNames = {
 	f: f$1
 };
 
-var anObject = function (it) {
-  if (!isObject(it)) {
-    throw TypeError(String(it) + ' is not an object');
-  } return it;
-};
-
-// eslint-disable-next-line es/no-object-defineproperty -- safe
-var $defineProperty = Object.defineProperty;
-
-// `Object.defineProperty` method
-// https://tc39.es/ecma262/#sec-object.defineproperty
-var f$2 = descriptors ? $defineProperty : function defineProperty(O, P, Attributes) {
-  anObject(O);
-  P = toPrimitive(P, true);
-  anObject(Attributes);
-  if (ie8DomDefine) try {
-    return $defineProperty(O, P, Attributes);
-  } catch (error) { /* empty */ }
-  if ('get' in Attributes || 'set' in Attributes) throw TypeError('Accessors not supported');
-  if ('value' in Attributes) O[P] = Attributes.value;
-  return O;
-};
-
-var objectDefineProperty = {
-	f: f$2
+var createPropertyDescriptor = function (bitmap, value) {
+  return {
+    enumerable: !(bitmap & 1),
+    configurable: !(bitmap & 2),
+    writable: !(bitmap & 4),
+    value: value
+  };
 };
 
 var createNonEnumerableProperty = descriptors ? function (object, key, value) {
@@ -214,21 +343,6 @@ var store = global$1[SHARED] || setGlobal(SHARED, {});
 
 var sharedStore = store;
 
-var functionToString = Function.toString;
-
-// this helper broken in `core-js@3.4.1-3.4.4`, so we can't use `shared` helper
-if (typeof sharedStore.inspectSource != 'function') {
-  sharedStore.inspectSource = function (it) {
-    return functionToString.call(it);
-  };
-}
-
-var inspectSource = sharedStore.inspectSource;
-
-var WeakMap = global$1.WeakMap;
-
-var nativeWeakMap = typeof WeakMap === 'function' && /native code/.test(inspectSource(WeakMap));
-
 var shared = createCommonjsModule(function (module) {
 (module.exports = function (key, value) {
   return sharedStore[key] || (sharedStore[key] = value !== undefined ? value : {});
@@ -246,13 +360,137 @@ var uid = function (key) {
   return 'Symbol(' + String(key === undefined ? '' : key) + ')_' + (++id + postfix).toString(36);
 };
 
+var path = global$1;
+
+var aFunction = function (variable) {
+  return typeof variable == 'function' ? variable : undefined;
+};
+
+var getBuiltIn = function (namespace, method) {
+  return arguments.length < 2 ? aFunction(path[namespace]) || aFunction(global$1[namespace])
+    : path[namespace] && path[namespace][method] || global$1[namespace] && global$1[namespace][method];
+};
+
+var engineUserAgent = getBuiltIn('navigator', 'userAgent') || '';
+
+var process = global$1.process;
+var versions = process && process.versions;
+var v8 = versions && versions.v8;
+var match, version;
+
+if (v8) {
+  match = v8.split('.');
+  version = match[0] < 4 ? 1 : match[0] + match[1];
+} else if (engineUserAgent) {
+  match = engineUserAgent.match(/Edge\/(\d+)/);
+  if (!match || match[1] >= 74) {
+    match = engineUserAgent.match(/Chrome\/(\d+)/);
+    if (match) version = match[1];
+  }
+}
+
+var engineV8Version = version && +version;
+
+/* eslint-disable es/no-symbol -- required for testing */
+
+// eslint-disable-next-line es/no-object-getownpropertysymbols -- required for testing
+var nativeSymbol = !!Object.getOwnPropertySymbols && !fails(function () {
+  var symbol = Symbol();
+  // Chrome 38 Symbol has incorrect toString conversion
+  // `get-own-property-symbols` polyfill symbols converted to object are not Symbol instances
+  return !String(symbol) || !(Object(symbol) instanceof Symbol) ||
+    // Chrome 38-40 symbols are not inherited from DOM collections prototypes to instances
+    !Symbol.sham && engineV8Version && engineV8Version < 41;
+});
+
+/* eslint-disable es/no-symbol -- required for testing */
+
+var useSymbolAsUid = nativeSymbol
+  && !Symbol.sham
+  && typeof Symbol.iterator == 'symbol';
+
+var WellKnownSymbolsStore = shared('wks');
+var Symbol$1 = global$1.Symbol;
+var createWellKnownSymbol = useSymbolAsUid ? Symbol$1 : Symbol$1 && Symbol$1.withoutSetter || uid;
+
+var wellKnownSymbol = function (name) {
+  if (!has(WellKnownSymbolsStore, name) || !(nativeSymbol || typeof WellKnownSymbolsStore[name] == 'string')) {
+    if (nativeSymbol && has(Symbol$1, name)) {
+      WellKnownSymbolsStore[name] = Symbol$1[name];
+    } else {
+      WellKnownSymbolsStore[name] = createWellKnownSymbol('Symbol.' + name);
+    }
+  } return WellKnownSymbolsStore[name];
+};
+
+var MATCH = wellKnownSymbol('match');
+
+// `IsRegExp` abstract operation
+// https://tc39.es/ecma262/#sec-isregexp
+var isRegexp = function (it) {
+  var isRegExp;
+  return isObject(it) && ((isRegExp = it[MATCH]) !== undefined ? !!isRegExp : classofRaw(it) == 'RegExp');
+};
+
+// `RegExp.prototype.flags` getter implementation
+// https://tc39.es/ecma262/#sec-get-regexp.prototype.flags
+var regexpFlags = function () {
+  var that = anObject(this);
+  var result = '';
+  if (that.global) result += 'g';
+  if (that.ignoreCase) result += 'i';
+  if (that.multiline) result += 'm';
+  if (that.dotAll) result += 's';
+  if (that.unicode) result += 'u';
+  if (that.sticky) result += 'y';
+  return result;
+};
+
+// babel-minify transpiles RegExp('a', 'y') -> /a/y and it causes SyntaxError,
+// so we use an intermediate function.
+function RE(s, f) {
+  return RegExp(s, f);
+}
+
+var UNSUPPORTED_Y = fails(function () {
+  // babel-minify transpiles RegExp('a', 'y') -> /a/y and it causes SyntaxError
+  var re = RE('a', 'y');
+  re.lastIndex = 2;
+  return re.exec('abcd') != null;
+});
+
+var BROKEN_CARET = fails(function () {
+  // https://bugzilla.mozilla.org/show_bug.cgi?id=773687
+  var re = RE('^r', 'gy');
+  re.lastIndex = 2;
+  return re.exec('str') != null;
+});
+
+var regexpStickyHelpers = {
+	UNSUPPORTED_Y: UNSUPPORTED_Y,
+	BROKEN_CARET: BROKEN_CARET
+};
+
+var functionToString = Function.toString;
+
+// this helper broken in `core-js@3.4.1-3.4.4`, so we can't use `shared` helper
+if (typeof sharedStore.inspectSource != 'function') {
+  sharedStore.inspectSource = function (it) {
+    return functionToString.call(it);
+  };
+}
+
+var inspectSource = sharedStore.inspectSource;
+
+var WeakMap = global$1.WeakMap;
+
+var nativeWeakMap = typeof WeakMap === 'function' && /native code/.test(inspectSource(WeakMap));
+
 var keys = shared('keys');
 
 var sharedKey = function (key) {
   return keys[key] || (keys[key] = uid(key));
 };
-
-var hiddenKeys = {};
 
 var OBJECT_ALREADY_INITIALIZED = 'Object already initialized';
 var WeakMap$1 = global$1.WeakMap;
@@ -349,111 +587,137 @@ var TEMPLATE = String(String).split('String');
 });
 });
 
-var path = global$1;
+var SPECIES = wellKnownSymbol('species');
 
-var aFunction = function (variable) {
-  return typeof variable == 'function' ? variable : undefined;
-};
+var setSpecies = function (CONSTRUCTOR_NAME) {
+  var Constructor = getBuiltIn(CONSTRUCTOR_NAME);
+  var defineProperty = objectDefineProperty.f;
 
-var getBuiltIn = function (namespace, method) {
-  return arguments.length < 2 ? aFunction(path[namespace]) || aFunction(global$1[namespace])
-    : path[namespace] && path[namespace][method] || global$1[namespace] && global$1[namespace][method];
-};
-
-var ceil = Math.ceil;
-var floor = Math.floor;
-
-// `ToInteger` abstract operation
-// https://tc39.es/ecma262/#sec-tointeger
-var toInteger = function (argument) {
-  return isNaN(argument = +argument) ? 0 : (argument > 0 ? floor : ceil)(argument);
-};
-
-var min = Math.min;
-
-// `ToLength` abstract operation
-// https://tc39.es/ecma262/#sec-tolength
-var toLength = function (argument) {
-  return argument > 0 ? min(toInteger(argument), 0x1FFFFFFFFFFFFF) : 0; // 2 ** 53 - 1 == 9007199254740991
-};
-
-var max = Math.max;
-var min$1 = Math.min;
-
-// Helper for a popular repeating case of the spec:
-// Let integer be ? ToInteger(index).
-// If integer < 0, let result be max((length + integer), 0); else let result be min(integer, length).
-var toAbsoluteIndex = function (index, length) {
-  var integer = toInteger(index);
-  return integer < 0 ? max(integer + length, 0) : min$1(integer, length);
-};
-
-// `Array.prototype.{ indexOf, includes }` methods implementation
-var createMethod = function (IS_INCLUDES) {
-  return function ($this, el, fromIndex) {
-    var O = toIndexedObject($this);
-    var length = toLength(O.length);
-    var index = toAbsoluteIndex(fromIndex, length);
-    var value;
-    // Array#includes uses SameValueZero equality algorithm
-    // eslint-disable-next-line no-self-compare -- NaN check
-    if (IS_INCLUDES && el != el) while (length > index) {
-      value = O[index++];
-      // eslint-disable-next-line no-self-compare -- NaN check
-      if (value != value) return true;
-    // Array#indexOf ignores holes, Array#includes - not
-    } else for (;length > index; index++) {
-      if ((IS_INCLUDES || index in O) && O[index] === el) return IS_INCLUDES || index || 0;
-    } return !IS_INCLUDES && -1;
-  };
-};
-
-var arrayIncludes = {
-  // `Array.prototype.includes` method
-  // https://tc39.es/ecma262/#sec-array.prototype.includes
-  includes: createMethod(true),
-  // `Array.prototype.indexOf` method
-  // https://tc39.es/ecma262/#sec-array.prototype.indexof
-  indexOf: createMethod(false)
-};
-
-var indexOf = arrayIncludes.indexOf;
-
-
-var objectKeysInternal = function (object, names) {
-  var O = toIndexedObject(object);
-  var i = 0;
-  var result = [];
-  var key;
-  for (key in O) !has(hiddenKeys, key) && has(O, key) && result.push(key);
-  // Don't enum bug & hidden keys
-  while (names.length > i) if (has(O, key = names[i++])) {
-    ~indexOf(result, key) || result.push(key);
+  if (descriptors && Constructor && !Constructor[SPECIES]) {
+    defineProperty(Constructor, SPECIES, {
+      configurable: true,
+      get: function () { return this; }
+    });
   }
-  return result;
 };
 
-// IE8- don't enum bug keys
-var enumBugKeys = [
-  'constructor',
-  'hasOwnProperty',
-  'isPrototypeOf',
-  'propertyIsEnumerable',
-  'toLocaleString',
-  'toString',
-  'valueOf'
-];
+var defineProperty = objectDefineProperty.f;
+var getOwnPropertyNames = objectGetOwnPropertyNames.f;
 
-var hiddenKeys$1 = enumBugKeys.concat('length', 'prototype');
 
-// `Object.getOwnPropertyNames` method
-// https://tc39.es/ecma262/#sec-object.getownpropertynames
-// eslint-disable-next-line es/no-object-getownpropertynames -- safe
-var f$3 = Object.getOwnPropertyNames || function getOwnPropertyNames(O) {
-  return objectKeysInternal(O, hiddenKeys$1);
+
+
+
+var enforceInternalState = internalState.enforce;
+
+
+
+var MATCH$1 = wellKnownSymbol('match');
+var NativeRegExp = global$1.RegExp;
+var RegExpPrototype = NativeRegExp.prototype;
+var re1 = /a/g;
+var re2 = /a/g;
+
+// "new" should create a new object, old webkit bug
+var CORRECT_NEW = new NativeRegExp(re1) !== re1;
+
+var UNSUPPORTED_Y$1 = regexpStickyHelpers.UNSUPPORTED_Y;
+
+var FORCED = descriptors && isForced_1('RegExp', (!CORRECT_NEW || UNSUPPORTED_Y$1 || fails(function () {
+  re2[MATCH$1] = false;
+  // RegExp constructor can alter flags and IsRegExp works correct with @@match
+  return NativeRegExp(re1) != re1 || NativeRegExp(re2) == re2 || NativeRegExp(re1, 'i') != '/a/i';
+})));
+
+// `RegExp` constructor
+// https://tc39.es/ecma262/#sec-regexp-constructor
+if (FORCED) {
+  var RegExpWrapper = function RegExp(pattern, flags) {
+    var thisIsRegExp = this instanceof RegExpWrapper;
+    var patternIsRegExp = isRegexp(pattern);
+    var flagsAreUndefined = flags === undefined;
+    var sticky;
+
+    if (!thisIsRegExp && patternIsRegExp && pattern.constructor === RegExpWrapper && flagsAreUndefined) {
+      return pattern;
+    }
+
+    if (CORRECT_NEW) {
+      if (patternIsRegExp && !flagsAreUndefined) pattern = pattern.source;
+    } else if (pattern instanceof RegExpWrapper) {
+      if (flagsAreUndefined) flags = regexpFlags.call(pattern);
+      pattern = pattern.source;
+    }
+
+    if (UNSUPPORTED_Y$1) {
+      sticky = !!flags && flags.indexOf('y') > -1;
+      if (sticky) flags = flags.replace(/y/g, '');
+    }
+
+    var result = inheritIfRequired(
+      CORRECT_NEW ? new NativeRegExp(pattern, flags) : NativeRegExp(pattern, flags),
+      thisIsRegExp ? this : RegExpPrototype,
+      RegExpWrapper
+    );
+
+    if (UNSUPPORTED_Y$1 && sticky) {
+      var state = enforceInternalState(result);
+      state.sticky = true;
+    }
+
+    return result;
+  };
+  var proxy = function (key) {
+    key in RegExpWrapper || defineProperty(RegExpWrapper, key, {
+      configurable: true,
+      get: function () { return NativeRegExp[key]; },
+      set: function (it) { NativeRegExp[key] = it; }
+    });
+  };
+  var keys$1 = getOwnPropertyNames(NativeRegExp);
+  var index = 0;
+  while (keys$1.length > index) proxy(keys$1[index++]);
+  RegExpPrototype.constructor = RegExpWrapper;
+  RegExpWrapper.prototype = RegExpPrototype;
+  redefine(global$1, 'RegExp', RegExpWrapper);
+}
+
+// https://tc39.es/ecma262/#sec-get-regexp-@@species
+setSpecies('RegExp');
+
+var $propertyIsEnumerable = {}.propertyIsEnumerable;
+// eslint-disable-next-line es/no-object-getownpropertydescriptor -- safe
+var getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+
+// Nashorn ~ JDK8 bug
+var NASHORN_BUG = getOwnPropertyDescriptor && !$propertyIsEnumerable.call({ 1: 2 }, 1);
+
+// `Object.prototype.propertyIsEnumerable` method implementation
+// https://tc39.es/ecma262/#sec-object.prototype.propertyisenumerable
+var f$2 = NASHORN_BUG ? function propertyIsEnumerable(V) {
+  var descriptor = getOwnPropertyDescriptor(this, V);
+  return !!descriptor && descriptor.enumerable;
+} : $propertyIsEnumerable;
+
+var objectPropertyIsEnumerable = {
+	f: f$2
 };
 
-var objectGetOwnPropertyNames = {
+// eslint-disable-next-line es/no-object-getownpropertydescriptor -- safe
+var $getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+
+// `Object.getOwnPropertyDescriptor` method
+// https://tc39.es/ecma262/#sec-object.getownpropertydescriptor
+var f$3 = descriptors ? $getOwnPropertyDescriptor : function getOwnPropertyDescriptor(O, P) {
+  O = toIndexedObject(O);
+  P = toPrimitive(P, true);
+  if (ie8DomDefine) try {
+    return $getOwnPropertyDescriptor(O, P);
+  } catch (error) { /* empty */ }
+  if (has(O, P)) return createPropertyDescriptor(!objectPropertyIsEnumerable.f.call(O, P), O[P]);
+};
+
+var objectGetOwnPropertyDescriptor = {
 	f: f$3
 };
 
@@ -480,26 +744,6 @@ var copyConstructorProperties = function (target, source) {
     if (!has(target, key)) defineProperty(target, key, getOwnPropertyDescriptor(source, key));
   }
 };
-
-var replacement = /#|\.prototype\./;
-
-var isForced = function (feature, detection) {
-  var value = data[normalize(feature)];
-  return value == POLYFILL ? true
-    : value == NATIVE ? false
-    : typeof detection == 'function' ? fails(detection)
-    : !!detection;
-};
-
-var normalize = isForced.normalize = function (string) {
-  return String(string).replace(replacement, '.').toLowerCase();
-};
-
-var data = isForced.data = {};
-var NATIVE = isForced.NATIVE = 'N';
-var POLYFILL = isForced.POLYFILL = 'P';
-
-var isForced_1 = isForced;
 
 var getOwnPropertyDescriptor$1 = objectGetOwnPropertyDescriptor.f;
 
@@ -555,45 +799,6 @@ var _export = function (options, source) {
   }
 };
 
-// `RegExp.prototype.flags` getter implementation
-// https://tc39.es/ecma262/#sec-get-regexp.prototype.flags
-var regexpFlags = function () {
-  var that = anObject(this);
-  var result = '';
-  if (that.global) result += 'g';
-  if (that.ignoreCase) result += 'i';
-  if (that.multiline) result += 'm';
-  if (that.dotAll) result += 's';
-  if (that.unicode) result += 'u';
-  if (that.sticky) result += 'y';
-  return result;
-};
-
-// babel-minify transpiles RegExp('a', 'y') -> /a/y and it causes SyntaxError,
-// so we use an intermediate function.
-function RE(s, f) {
-  return RegExp(s, f);
-}
-
-var UNSUPPORTED_Y = fails(function () {
-  // babel-minify transpiles RegExp('a', 'y') -> /a/y and it causes SyntaxError
-  var re = RE('a', 'y');
-  re.lastIndex = 2;
-  return re.exec('abcd') != null;
-});
-
-var BROKEN_CARET = fails(function () {
-  // https://bugzilla.mozilla.org/show_bug.cgi?id=773687
-  var re = RE('^r', 'gy');
-  re.lastIndex = 2;
-  return re.exec('str') != null;
-});
-
-var regexpStickyHelpers = {
-	UNSUPPORTED_Y: UNSUPPORTED_Y,
-	BROKEN_CARET: BROKEN_CARET
-};
-
 /* eslint-disable regexp/no-assertion-capturing-group, regexp/no-empty-group, regexp/no-lazy-ends -- testing */
 /* eslint-disable regexp/no-useless-quantifier -- testing */
 
@@ -613,18 +818,18 @@ var UPDATES_LAST_INDEX_WRONG = (function () {
   return re1.lastIndex !== 0 || re2.lastIndex !== 0;
 })();
 
-var UNSUPPORTED_Y$1 = regexpStickyHelpers.UNSUPPORTED_Y || regexpStickyHelpers.BROKEN_CARET;
+var UNSUPPORTED_Y$2 = regexpStickyHelpers.UNSUPPORTED_Y || regexpStickyHelpers.BROKEN_CARET;
 
 // nonparticipating capturing group, copied from es5-shim's String#split patch.
 var NPCG_INCLUDED = /()??/.exec('')[1] !== undefined;
 
-var PATCH = UPDATES_LAST_INDEX_WRONG || NPCG_INCLUDED || UNSUPPORTED_Y$1;
+var PATCH = UPDATES_LAST_INDEX_WRONG || NPCG_INCLUDED || UNSUPPORTED_Y$2;
 
 if (PATCH) {
   patchedExec = function exec(str) {
     var re = this;
     var lastIndex, reCopy, match, i;
-    var sticky = UNSUPPORTED_Y$1 && re.sticky;
+    var sticky = UNSUPPORTED_Y$2 && re.sticky;
     var flags = regexpFlags.call(re);
     var source = re.source;
     var charsAdded = 0;
@@ -687,58 +892,6 @@ _export({ target: 'RegExp', proto: true, forced: /./.exec !== regexpExec }, {
   exec: regexpExec
 });
 
-var engineUserAgent = getBuiltIn('navigator', 'userAgent') || '';
-
-var process = global$1.process;
-var versions = process && process.versions;
-var v8 = versions && versions.v8;
-var match, version;
-
-if (v8) {
-  match = v8.split('.');
-  version = match[0] < 4 ? 1 : match[0] + match[1];
-} else if (engineUserAgent) {
-  match = engineUserAgent.match(/Edge\/(\d+)/);
-  if (!match || match[1] >= 74) {
-    match = engineUserAgent.match(/Chrome\/(\d+)/);
-    if (match) version = match[1];
-  }
-}
-
-var engineV8Version = version && +version;
-
-/* eslint-disable es/no-symbol -- required for testing */
-
-// eslint-disable-next-line es/no-object-getownpropertysymbols -- required for testing
-var nativeSymbol = !!Object.getOwnPropertySymbols && !fails(function () {
-  var symbol = Symbol();
-  // Chrome 38 Symbol has incorrect toString conversion
-  // `get-own-property-symbols` polyfill symbols converted to object are not Symbol instances
-  return !String(symbol) || !(Object(symbol) instanceof Symbol) ||
-    // Chrome 38-40 symbols are not inherited from DOM collections prototypes to instances
-    !Symbol.sham && engineV8Version && engineV8Version < 41;
-});
-
-/* eslint-disable es/no-symbol -- required for testing */
-
-var useSymbolAsUid = nativeSymbol
-  && !Symbol.sham
-  && typeof Symbol.iterator == 'symbol';
-
-var WellKnownSymbolsStore = shared('wks');
-var Symbol$1 = global$1.Symbol;
-var createWellKnownSymbol = useSymbolAsUid ? Symbol$1 : Symbol$1 && Symbol$1.withoutSetter || uid;
-
-var wellKnownSymbol = function (name) {
-  if (!has(WellKnownSymbolsStore, name) || !(nativeSymbol || typeof WellKnownSymbolsStore[name] == 'string')) {
-    if (nativeSymbol && has(Symbol$1, name)) {
-      WellKnownSymbolsStore[name] = Symbol$1[name];
-    } else {
-      WellKnownSymbolsStore[name] = createWellKnownSymbol('Symbol.' + name);
-    }
-  } return WellKnownSymbolsStore[name];
-};
-
 // TODO: Remove from `core-js@4` since it's moved to entry points
 
 
@@ -747,8 +900,8 @@ var wellKnownSymbol = function (name) {
 
 
 
-var SPECIES = wellKnownSymbol('species');
-var RegExpPrototype = RegExp.prototype;
+var SPECIES$1 = wellKnownSymbol('species');
+var RegExpPrototype$1 = RegExp.prototype;
 
 var REPLACE_SUPPORTS_NAMED_GROUPS = !fails(function () {
   // #replace needs built-in support for named groups.
@@ -813,7 +966,7 @@ var fixRegexpWellKnownSymbolLogic = function (KEY, length, exec, sham) {
       // RegExp[@@split] doesn't call the regex's exec method, but first creates
       // a new one. We need to return the patched regex when creating the new one.
       re.constructor = {};
-      re.constructor[SPECIES] = function () { return re; };
+      re.constructor[SPECIES$1] = function () { return re; };
       re.flags = '';
       re[SYMBOL] = /./[SYMBOL];
     }
@@ -837,7 +990,7 @@ var fixRegexpWellKnownSymbolLogic = function (KEY, length, exec, sham) {
     var nativeRegExpMethod = /./[SYMBOL];
     var methods = exec(SYMBOL, ''[KEY], function (nativeMethod, regexp, str, arg2, forceStringMethod) {
       var $exec = regexp.exec;
-      if ($exec === regexpExec || $exec === RegExpPrototype.exec) {
+      if ($exec === regexpExec || $exec === RegExpPrototype$1.exec) {
         if (DELEGATES_TO_SYMBOL && !forceStringMethod) {
           // The native String method already delegates to @@method (this
           // polyfilled function), leasing to infinite recursion.
@@ -855,7 +1008,7 @@ var fixRegexpWellKnownSymbolLogic = function (KEY, length, exec, sham) {
     var regexMethod = methods[1];
 
     redefine(String.prototype, KEY, stringMethod);
-    redefine(RegExpPrototype, SYMBOL, length == 2
+    redefine(RegExpPrototype$1, SYMBOL, length == 2
       // 21.2.5.8 RegExp.prototype[@@replace](string, replaceValue)
       // 21.2.5.11 RegExp.prototype[@@split](string, limit)
       ? function (string, arg) { return regexMethod.call(string, this, arg); }
@@ -865,7 +1018,7 @@ var fixRegexpWellKnownSymbolLogic = function (KEY, length, exec, sham) {
     );
   }
 
-  if (sham) createNonEnumerableProperty(RegExpPrototype[SYMBOL], 'sham', true);
+  if (sham) createNonEnumerableProperty(RegExpPrototype$1[SYMBOL], 'sham', true);
 };
 
 // `String.prototype.{ codePointAt, at }` methods implementation
@@ -1449,38 +1602,7 @@ var redefineAll = function (target, src, options) {
   return target;
 };
 
-var aPossiblePrototype = function (it) {
-  if (!isObject(it) && it !== null) {
-    throw TypeError("Can't set " + String(it) + ' as a prototype');
-  } return it;
-};
-
-/* eslint-disable no-proto -- safe */
-
-// `Object.setPrototypeOf` method
-// https://tc39.es/ecma262/#sec-object.setprototypeof
-// Works with __proto__ only. Old v8 can't work with null proto objects.
-// eslint-disable-next-line es/no-object-setprototypeof -- safe
-var objectSetPrototypeOf = Object.setPrototypeOf || ('__proto__' in {} ? function () {
-  var CORRECT_SETTER = false;
-  var test = {};
-  var setter;
-  try {
-    // eslint-disable-next-line es/no-object-getownpropertydescriptor -- safe
-    setter = Object.getOwnPropertyDescriptor(Object.prototype, '__proto__').set;
-    setter.call(test, []);
-    CORRECT_SETTER = test instanceof Array;
-  } catch (error) { /* empty */ }
-  return function setPrototypeOf(O, proto) {
-    anObject(O);
-    aPossiblePrototype(proto);
-    if (CORRECT_SETTER) setter.call(O, proto);
-    else O.__proto__ = proto;
-    return O;
-  };
-}() : undefined);
-
-var defineProperty = objectDefineProperty.f;
+var defineProperty$1 = objectDefineProperty.f;
 
 
 
@@ -1488,21 +1610,7 @@ var TO_STRING_TAG = wellKnownSymbol('toStringTag');
 
 var setToStringTag = function (it, TAG, STATIC) {
   if (it && !has(it = STATIC ? it : it.prototype, TO_STRING_TAG)) {
-    defineProperty(it, TO_STRING_TAG, { configurable: true, value: TAG });
-  }
-};
-
-var SPECIES$1 = wellKnownSymbol('species');
-
-var setSpecies = function (CONSTRUCTOR_NAME) {
-  var Constructor = getBuiltIn(CONSTRUCTOR_NAME);
-  var defineProperty = objectDefineProperty.f;
-
-  if (descriptors && Constructor && !Constructor[SPECIES$1]) {
-    defineProperty(Constructor, SPECIES$1, {
-      configurable: true,
-      get: function () { return this; }
-    });
+    defineProperty$1(it, TO_STRING_TAG, { configurable: true, value: TAG });
   }
 };
 
@@ -1970,7 +2078,7 @@ var UNHANDLED = 2;
 var SUBCLASSING = false;
 var Internal, OwnPromiseCapability, PromiseWrapper, nativeThen;
 
-var FORCED = isForced_1(PROMISE, function () {
+var FORCED$1 = isForced_1(PROMISE, function () {
   var GLOBAL_CORE_JS_PROMISE = inspectSource(PromiseConstructor) !== String(PromiseConstructor);
   // V8 6.6 (Node 10 and Chrome 66) have a bug with resolving custom thenables
   // https://bugs.chromium.org/p/chromium/issues/detail?id=830565
@@ -1993,7 +2101,7 @@ var FORCED = isForced_1(PROMISE, function () {
   return !GLOBAL_CORE_JS_PROMISE && engineIsBrowser && !NATIVE_REJECTION_EVENT;
 });
 
-var INCORRECT_ITERATION = FORCED || !checkCorrectnessOfIteration(function (iterable) {
+var INCORRECT_ITERATION = FORCED$1 || !checkCorrectnessOfIteration(function (iterable) {
   PromiseConstructor.all(iterable)['catch'](function () { /* empty */ });
 });
 
@@ -2141,7 +2249,7 @@ var internalResolve = function (state, value, unwrap) {
 };
 
 // constructor polyfill
-if (FORCED) {
+if (FORCED$1) {
   // 25.4.3.1 Promise(executor)
   PromiseConstructor = function Promise(executor) {
     anInstance(this, PromiseConstructor, PROMISE);
@@ -2230,7 +2338,7 @@ if (FORCED) {
   }
 }
 
-_export({ global: true, wrap: true, forced: FORCED }, {
+_export({ global: true, wrap: true, forced: FORCED$1 }, {
   Promise: PromiseConstructor
 });
 
@@ -2240,7 +2348,7 @@ setSpecies(PROMISE);
 PromiseWrapper = getBuiltIn(PROMISE);
 
 // statics
-_export({ target: PROMISE, stat: true, forced: FORCED }, {
+_export({ target: PROMISE, stat: true, forced: FORCED$1 }, {
   // `Promise.reject` method
   // https://tc39.es/ecma262/#sec-promise.reject
   reject: function reject(r) {
@@ -2250,7 +2358,7 @@ _export({ target: PROMISE, stat: true, forced: FORCED }, {
   }
 });
 
-_export({ target: PROMISE, stat: true, forced:  FORCED }, {
+_export({ target: PROMISE, stat: true, forced:  FORCED$1 }, {
   // `Promise.resolve` method
   // https://tc39.es/ecma262/#sec-promise.resolve
   resolve: function resolve(x) {
@@ -2305,6 +2413,7 @@ _export({ target: PROMISE, stat: true, forced: INCORRECT_ITERATION }, {
   }
 });
 
+/** @this EagerForm */
 function matchRule (element, attribute) {
   let msg = this.translate("valueNotEqual");
   return new Promise((resolve, reject) => {
@@ -2338,9 +2447,9 @@ function referenceRule (element, attribute) {
   });
 }
 
-function ownKeys$1(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
+function ownKeys$1(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); enumerableOnly && (symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; })), keys.push.apply(keys, symbols); } return keys; }
 
-function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys$1(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys$1(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = null != arguments[i] ? arguments[i] : {}; i % 2 ? ownKeys$1(Object(source), !0).forEach(function (key) { _defineProperty(target, key, source[key]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$1(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } return target; }
 
 /**
  * Remote rule
@@ -2352,9 +2461,14 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
  * @param  {String} attribute
  * @return {Promise}
  */
+
+/** @this EagerForm */
 function remoteRule (element, attribute) {
   let endpoint = decodeURIComponent(element.getAttribute(attribute)).replace("{value}", element.value);
-  let reverse = element.getAttribute("".concat(attribute, "-reverse")) == "true" ? true : false;
+  let reverse = element.getAttribute("".concat(attribute, "-reverse")) === "true";
+  let busyAttr = "data-".concat(EagerForm.RULE_PREFIX, "-remote-busy");
+  let parent = this.findParent(element);
+  parent.setAttribute(busyAttr, 'true');
   let name = "__remote_request_".concat(element.id);
 
   if (typeof this[name] == "undefined") {
@@ -2376,28 +2490,30 @@ function remoteRule (element, attribute) {
 
   if (customOptions) {
     options = _objectSpread(_objectSpread({}, options), customOptions);
-  } // Abort pending requests before staring new ones
+  } // Abort pending requests before starting new ones
 
 
   if (this[name].readyState > 0 && this[name].readyState < 4) {
     this[name].abort();
   }
 
-  var xhr = this[name];
+  const xhr = this[name];
   xhr.open(options.method, endpoint);
 
   for (const key in options.headers) {
     xhr.setRequestHeader(key, options.headers[key]);
   }
 
-  var msg = this.translate("remoteInvalid");
+  const msg = this.translate('remoteInvalid');
   return new Promise((resolve, reject) => {
     xhr.onload = function () {
-      let success = this.status == 200;
+      let success = this.status === 200;
 
       if (reverse) {
         success = !success;
       }
+
+      parent.setAttribute(busyAttr, 'false');
 
       if (success) {
         resolve();
@@ -2430,17 +2546,29 @@ var enLocale = {
   rangeUnderflow: "Please enter a value that is no less than {min}.",
   stepMismatch: "Please provide a valid value",
   remoteInvalid: "The field doesn't pass remote validation.",
-  valueNotEqual: "The values don't match"
+  valueNotEqual: "The values don't match",
+  numbers: {
+    '0': '0',
+    '1': '1',
+    '2': '2',
+    '3': '3',
+    '4': '4',
+    '5': '5',
+    '6': '6',
+    '7': '7',
+    '8': '8',
+    '9': '9'
+  }
 };
 
-function ownKeys$2(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
+function ownKeys$2(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); enumerableOnly && (symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; })), keys.push.apply(keys, symbols); } return keys; }
 
-function _objectSpread$1(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys$2(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys$2(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+function _objectSpread$1(target) { for (var i = 1; i < arguments.length; i++) { var source = null != arguments[i] ? arguments[i] : {}; i % 2 ? ownKeys$2(Object(source), !0).forEach(function (key) { _defineProperty(target, key, source[key]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$2(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } return target; }
 /**
  * EagerForm
  */
 
-class EagerForm {
+class EagerForm$1 {
   /**
    * Version
    *
@@ -2475,30 +2603,94 @@ class EagerForm {
    * Default options
    *
    * @type {Object}
+   *
+   * @property {string}    locale                       =>   The locale for EagerForm
+   * @property {Boolean}      showSuccessState             =>   Whether to show success state or not
+   * @property {Boolean}      focusFirstError              =>   Whether to focus first error or not
+   * @property {Boolean}      autoScroll                   =>   Whether to autoscroll to first error or not
+   * @property {Number}   offsetFocus                  =>   First element with error focus offset
+   * @property {Array}     revalidate                   =>   List of JS events to that triggers the validation
+   * @property {Boolean}      noTriggerOnTab               =>   Whether to run validation when element comes into
+   *                                                    focus by pressing the tab key
+   * @property {object}    delay                        =>   Delay for specific revalidate events
+   * @property {object}    debounce                     =>   Debounce for specific revalidate events
+   * @property {Boolean}      validateWithoutName          =>   Whether to validate inputs without a "name" attribute
+   * @property {Boolean}      captureSubmit                =>   Whether to capture the form submit or not
+   * @property {Boolean}      disableSubmit                =>   Whether to disable submit on submit capture or
+   *                                                    not,`captureSubmit` must be set to true.
+   * @property {Boolean}      captureReset                 =>   Whether to capture the form reset or not
+   * @property {string}    parentSelector               =>   Parent CSS selector, defaults to element.parentNode
+   * @property {string}    invalidFeedbackName          =>   Invalid feedback HTML element name, default is `div`
+   * @property {string}    invalidFeedbackPosition      =>   Invalid feedback HTML element position, value must be
+   *                                                    one of these: "beforebegin", "afterbegin", "beforeend",
+   *                                                    "afterend"
+   * @property {string}    invalidFeedbackSelector      =>   If provided, we will use this element to append the errors,
+   *                                                    both input and this element must belong to the same parent node.
+   *                                                    Defaults to: .invalid-feedback
+   * @property {object}    classes                      =>   List of various classess used by the library
+   * @property {string}    classes.formValidatedClass   =>   Class name to add when form validation is done
+   * @property {string}    classes.inputValidClass      =>   Class name to add when input is valid
+   * @property {string}    classes.inputInvalidClass    =>   Class name to add when input is invalid
+   * @property {string}    classes.parentValidClass     =>   Class name to add to parent element of the input when
+   *                                                      input is valid
+   * @property {string}    classes.parentInvalidClass   =>   Class name to add to parent element of the input when
+   *                                                      input is invalid
+   * @property {string}    classes.invalidFeedbackClass =>   Class name to add to the invalid feedback element
+   * @property {string}    classes.disabled             =>   Class name to add to disable elements/form
    */
 
   /**
    * Create a new instance of EagerForm
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement|String} element Element or Query string
    * @param  {Object} options
    * @return EagerForm
    */
-  constructor(element, options = {}) {
-    // The form instance
-    this.form = typeof element == "object" ? element : document.querySelector(element); // Try to find the submit button
+  constructor(element) {
+    let options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
 
-    this.submitBtn = this.form.querySelector('[type="submit"]'); // To store settimeouts
+    /**
+     * The form instance
+     * @type {HTMLFormElement}
+     */
+    this.form = typeof element === 'object' ? element : document.querySelector(element);
+    /**
+     * Try to find the submit button
+     *
+     * @type {HTMLElement}
+     */
 
-    this.intervals = {}; // Whether currently focusing an invalid element or not
+    this.submitBtn = this.form.querySelector('[type="submit"]');
+    /**
+     * To store settimeouts
+     *
+     * @type {Object}
+     */
 
-    this.isFocusing; // Types of event that do not bubble
+    this.intervals = {};
+    /**
+     * Whether currently focusing an invalid element or not
+     *
+     * @type {boolean}
+     */
 
-    this.unBubbledEvents = ['blur', 'focus']; // Merge with the default options
+    this.isFocusing = false;
+    /**
+     * Types of event that do not bubble
+     *
+     * @type {string[]}
+     */
 
-    this.options = _objectSpread$1(_objectSpread$1({}, EagerForm.defaultOptions), options); // Make sure the locale exists
+    this.unBubbledEvents = ['blur', 'focus'];
+    /**
+     * Merge with the default options
+     *
+     * @type {Object}
+     */
 
-    if (!EagerForm.messages[this.options.locale]) {
+    this.options = _objectSpread$1(_objectSpread$1({}, EagerForm$1.defaultOptions), options); // Make sure the locale exists
+
+    if (!EagerForm$1.messages[this.options.locale]) {
       throw new Error("The locale ".concat(this.options.locale, " is not loaded."));
     } // Store the binded functions so they can be detached later
 
@@ -2519,16 +2711,18 @@ class EagerForm {
   /**
    * Starts validation on the form
    *
+   * @return void
    */
 
 
   start() {
     this.attachEvents();
-    this.form.setAttribute("novalidate", true);
+    this.form.setAttribute('novalidate', 'true');
   }
   /**
    * Attaches events to the form
    *
+   * @return void
    */
 
 
@@ -2547,18 +2741,18 @@ class EagerForm {
 
 
     if (this.options.captureSubmit) {
-      this.form.addEventListener("submit", this.submitHandler);
+      this.form.addEventListener('submit', this.submitHandler);
     } // Handle form reset
 
 
     if (this.options.captureReset) {
-      this.form.addEventListener("reset", this.resetHandler);
+      this.form.addEventListener('reset', this.resetHandler);
     }
   }
   /**
    * Detach all registered events
    *
-   * @return
+   * @return void
    */
 
 
@@ -2577,12 +2771,12 @@ class EagerForm {
 
 
     if (this.options.captureSubmit) {
-      this.form.removeEventListener("submit", this.submitHandler);
+      this.form.removeEventListener('submit', this.submitHandler);
     } // Remove reset event
 
 
     if (this.options.captureReset) {
-      this.form.addEventListener("reset", this.resetHandler);
+      this.form.addEventListener('reset', this.resetHandler);
     }
   }
   /**
@@ -2590,6 +2784,8 @@ class EagerForm {
    *
    * @param {String} name
    * @param {Object} messages
+   *
+   * @return void
    */
 
 
@@ -2601,22 +2797,25 @@ class EagerForm {
    *
    * @param {[type]} key
    * @param {[type]} message
+   *
+   * @return EagerForm
    */
 
 
   addMessage(key, message) {
-    EagerForm.messages[this.options.locale][key] = message;
+    EagerForm$1.messages[this.options.locale][key] = message;
     return this;
   }
   /**
    * Set/overwrite messages
    *
    * @param {Object} messages
+   * @return EagerForm
    */
 
 
   setMessages(messages) {
-    EagerForm.messages[this.options.locale] = _objectSpread$1(_objectSpread$1({}, EagerForm.messages[this.options.locale]), messages);
+    EagerForm$1.messages[this.options.locale] = _objectSpread$1(_objectSpread$1({}, EagerForm$1.messages[this.options.locale]), messages);
     return this;
   }
   /**
@@ -2624,50 +2823,51 @@ class EagerForm {
    *
    * @param  {String} name
    * @param  {Function} callback
+   *
+   * @return void
    */
 
 
   static rule(name, callback) {
-    if (EagerForm.reservedWords.includes(name)) {
+    if (EagerForm$1.reservedWords.includes(name)) {
       throw new Error("".concat(name, " is a reserved word"));
     }
 
-    if (typeof callback != 'function') {
+    if (typeof callback !== 'function') {
       throw new Error('Callback must be a callable function');
     }
 
-    EagerForm.rules[name] = callback;
+    EagerForm$1.rules[name] = callback;
   }
   /**
    * Validate the entire form
    *
-   * @return {Bool}
+   * @return void
    */
 
 
   validate() {
     Array.prototype.filter.call(this.form.elements, element => {
-      this.validateField(element);
+      if (element.tagName !== 'FIELDSET') {
+        this.validateField(element);
+      }
     });
   }
   /**
    * Handles form submit
    *
-   * @param  {Object} event
+   * @param  {Event} event
    */
 
 
   handleSubmit(event) {
     this.validate();
-
-    if (this.options.showSuccessState) {
-      this.form.classList.add(this.options.classes.formValidatedClass);
-    }
-
-    let firstErrorElement = this.getFirstError();
+    this.form.classList.add(this.options.classes.formValidatedClass);
+    const firstErrorElement = this.getFirstError();
 
     if (firstErrorElement) {
       event.preventDefault();
+      event.stopPropagation();
 
       if (this.options.disableSubmit) {
         this.disableSubmit();
@@ -2680,6 +2880,8 @@ class EagerForm {
   }
   /**
    * Enable the submit button
+   *
+   * @return void
    */
 
 
@@ -2689,6 +2891,8 @@ class EagerForm {
   }
   /**
    * Disable the submit button
+   *
+   * @return void
    */
 
 
@@ -2700,6 +2904,8 @@ class EagerForm {
    * Handles form reset
    *
    * @param  {Object} event
+   *
+   * @return void
    */
 
 
@@ -2709,7 +2915,9 @@ class EagerForm {
   /**
    * Focuses a given input element
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement} element
+   *
+   * @return void
    */
 
 
@@ -2724,7 +2932,7 @@ class EagerForm {
       this.isFocusing = true;
       window.scrollTo({
         top: Math.round(element.getBoundingClientRect().top) + Math.round(window.scrollY) + -this.options.offsetFocus,
-        behavior: "smooth"
+        behavior: 'smooth'
       });
       setTimeout(() => {
         this.isFocusing = false;
@@ -2738,6 +2946,7 @@ class EagerForm {
   /**
    * Fires an event after the validate() method is finished
    *
+   * @return void
    */
 
 
@@ -2749,12 +2958,13 @@ class EagerForm {
   /**
    * Get the first error element (ignores elements that contain novalidate attribute)
    *
-   * @return {Object} Returns the very first invalid element's object if found else null
+   * @return {HTMLFormElement} Returns the very first invalid element's object if found else null
    */
 
 
   getFirstError() {
-    let element = this.form.querySelector(":invalid");
+    // Hotfix for fieldset elements
+    let element = this.form.querySelector('input:invalid,select:invalid,textarea:invalid');
 
     if (!element) {
       return null;
@@ -2763,7 +2973,7 @@ class EagerForm {
     // any other value (even empty no value) will be treated as true
 
 
-    if (element.hasAttribute('novalidate') && element.getAttribute('novalidate') != "false") {
+    if (element.hasAttribute('novalidate') && element.getAttribute('novalidate') !== 'false') {
       return null;
     } // Ignore element without name unless told otherwise
 
@@ -2787,7 +2997,9 @@ class EagerForm {
   /**
    * Handles the form/input change, blur or any kind of events that is registered
    *
-   * @param  {Object} event
+   * @param  {Event|KeyboardEvent|MouseEvent|CustomEvent} event
+   *
+   * @return void
    */
 
 
@@ -2801,12 +3013,12 @@ class EagerForm {
     } // Don't validate on intial tabbed switch (if enabled)
 
 
-    if (this.options.noTriggerOnTab && event.keyCode && event.keyCode == 9) {
+    if (this.options.noTriggerOnTab && event.key && event.key === 'Tab') {
       return;
     } // On a form change, enable the submit button back
 
 
-    if (event.type == 'change' && this.options.disableSubmit) {
+    if (event.type === 'change' && this.options.disableSubmit) {
       if (this.isValid()) {
         this.enableSubmit();
       }
@@ -2815,9 +3027,9 @@ class EagerForm {
 
     let callback = this.validateField.bind(this); // Debounce attribute
 
-    let debounceAttribute = "data-".concat(EagerForm.RULE_PREFIX, "-debounce"); // event specific debounce attribute
+    let debounceAttribute = "data-".concat(EagerForm$1.RULE_PREFIX, "-debounce"); // event specific debounce attribute
 
-    let specificDebounceAttribute = "data-".concat(EagerForm.RULE_PREFIX, "-").concat(event.type, "-debounce"); // Zero by default
+    let specificDebounceAttribute = "data-".concat(EagerForm$1.RULE_PREFIX, "-").concat(event.type, "-debounce"); // Zero by default
 
     let bounce = 0; // First check for event specific attribute
 
@@ -2834,9 +3046,9 @@ class EagerForm {
       callback = lodash_debounce(callback, bounce);
     }
 
-    let delayAttribute = "data-".concat(EagerForm.RULE_PREFIX, "-delay"); // event specific delay attribute
+    let delayAttribute = "data-".concat(EagerForm$1.RULE_PREFIX, "-delay"); // event specific delay attribute
 
-    let specificDelayAttribute = "data-".concat(EagerForm.RULE_PREFIX, "-").concat(event.type, "-delay");
+    let specificDelayAttribute = "data-".concat(EagerForm$1.RULE_PREFIX, "-").concat(event.type, "-delay");
     let delay = 0; // First check for event specific attribute
 
     if (event.target.hasAttribute(specificDelayAttribute)) {
@@ -2865,7 +3077,9 @@ class EagerForm {
   /**
    * Validates a field
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement} element
+   *
+   * @return void
    */
 
 
@@ -2879,7 +3093,7 @@ class EagerForm {
     // any other value (even empty no value) will be treated as true
 
 
-    if (element.hasAttribute('novalidate') && element.getAttribute('novalidate') != "false") {
+    if (element.hasAttribute('novalidate') && element.getAttribute('novalidate') !== 'false') {
       return;
     } // Ignore element without name unless told otherwise
 
@@ -2889,19 +3103,19 @@ class EagerForm {
     } // Determiner for default native error
 
 
-    let hasDefaultError = false;
-    let hasCustomError = false; // run HTML5 validation first
+    let hasDefaultError,
+        hasCustomError = false; // run HTML5 validation first
 
     if (element.checkValidity) {
       if (!element.checkValidity()) {
         for (let key in element.validity) {
           // We will deal with it later
-          if (key == "customError") {
+          if (key === 'customError') {
             hasCustomError = true;
             continue;
           }
 
-          if (element.validity[key] == true) {
+          if (element.validity[key] === true) {
             this.setError(element, key);
             hasDefaultError = true;
           }
@@ -2918,41 +3132,43 @@ class EagerForm {
     } // Validate custom rules
 
 
-    for (let key in EagerForm.rules) {
-      let attribute = "data-".concat(EagerForm.RULE_PREFIX, "-").concat(key); // Check if the attribute is present
+    for (let key in EagerForm$1.rules) {
+      let attribute = "data-".concat(EagerForm$1.RULE_PREFIX, "-").concat(key); // Check if the attribute is present
 
       if (!element.hasAttribute(attribute)) {
         continue;
       }
 
-      let rule = EagerForm.rules[key];
+      let rule = EagerForm$1.rules[key];
       rule.bind(this, element, attribute)().then(() => {
         // Field is valid, clear errors and return status
-        element.setCustomValidity("");
+        element.setCustomValidity('');
         this.clearError(element);
       }).catch(err => {
         let msg = ''; // Check if we have a dedicated error message attribute
 
         if (element.hasAttribute("".concat(attribute, "-error"))) {
           msg = element.getAttribute("".concat(attribute, "-error"));
-        } else if (element.hasAttribute("data-".concat(EagerForm.RULE_PREFIX, "-error"))) {
+        } else if (element.hasAttribute("data-".concat(EagerForm$1.RULE_PREFIX, "-error"))) {
           // Or a global error attribute
-          msg = element.getAttribute("data-".concat(EagerForm.RULE_PREFIX, "-error"));
+          msg = element.getAttribute("data-".concat(EagerForm$1.RULE_PREFIX, "-error"));
         } else if (err && err.toString().length) {
           msg = err;
         }
 
         element.setCustomValidity(msg); // report the custom error
 
-        this.setError(element, "customError");
+        this.setError(element, 'customError');
       });
     }
   }
   /**
    * Set error status and messages to a field
    *
-   * @param {Object} element
+   * @param {HTMLFormElement} element
    * @param {String} validityType The validity type from ValidityState
+   *
+   * @return void
    */
 
 
@@ -2989,8 +3205,10 @@ class EagerForm {
   /**
    * Display error feedback for an element
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement} element
    * @param {String} validityType The validity type from ValidityState
+   *
+   * @return void
    */
 
 
@@ -3020,22 +3238,23 @@ class EagerForm {
   /**
    * Get feedback message for an element
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement} element
    * @param {String} validityType The validity type from ValidityState
+   *
    * @return {String}
    */
 
 
   getMessage(element, validityType) {
-    if (validityType == "customError") {
+    if (validityType === 'customError') {
       return element.validationMessage;
     }
 
     let msg;
     let type = element.type.toLowerCase();
     let specificKey = "".concat(validityType).concat(type.charAt(0).toUpperCase() + type.slice(1));
-    let inline = "data-".concat(EagerForm.RULE_PREFIX, "-") + validityType.replace(/[A-Z]/g, "-$&").toLowerCase() + "-error";
-    let inlineGlobal = "data-".concat(EagerForm.RULE_PREFIX, "-error"); // First check for rule specific custom error message
+    let inline = "data-".concat(EagerForm$1.RULE_PREFIX, "-") + validityType.replace(/[A-Z]/g, '-$&').toLowerCase() + '-error';
+    let inlineGlobal = "data-".concat(EagerForm$1.RULE_PREFIX, "-error"); // First check for rule specific custom error message
 
     if (element.hasAttribute(inline)) {
       msg = element.getAttribute(inline);
@@ -3046,11 +3265,11 @@ class EagerForm {
 
     if (!msg) {
       switch (validityType) {
-        case "valueMissing":
-        case "typeMismatch":
-        case "rangeOverflow":
-        case "rangeUnderflow":
-        case "badInput":
+        case 'valueMissing':
+        case 'typeMismatch':
+        case 'rangeOverflow':
+        case 'rangeUnderflow':
+        case 'badInput':
           msg = this.translate(specificKey);
 
           if (!msg) {
@@ -3071,29 +3290,27 @@ class EagerForm {
     }
 
     let data = {
-      count: Number(EagerForm.unicodeStrLen(element.value.toString())).toLocaleString(this.options.locale),
-      maxlength: Number(element.getAttribute("maxlength")).toLocaleString(this.options.locale),
-      minlength: Number(element.getAttribute("minlength")).toLocaleString(this.options.locale),
-      min: element.getAttribute("min"),
-      max: element.getAttribute("max"),
-      step: Number(element.getAttribute("step")).toLocaleString(this.options.locale)
+      count: this.translateNumbers(EagerForm$1.unicodeStrLen(element.value.toString())),
+      maxlength: this.translateNumbers(element.getAttribute('maxlength')),
+      minlength: this.translateNumbers(element.getAttribute('minlength')),
+      step: this.translateNumbers(element.getAttribute('step'))
     };
 
     switch (type) {
-      case "number":
-      case "range":
-        data.min = Number(data.min).toLocaleString(this.options.locale);
-        data.max = Number(data.max).toLocaleString(this.options.locale);
+      case 'number':
+      case 'range':
+        data.min = this.translateNumbers(data.min);
+        data.max = this.translateNumbers(data.max);
         break;
 
-      case "date":
-      case "datetime-local":
+      case 'date':
+      case 'datetime-local':
         data.min = new Date(data.min).toLocaleString(this.options.locale);
         data.max = new Date(data.max).toLocaleString(this.options.locale);
         break;
     }
 
-    return EagerForm.strtpl(msg, data);
+    return EagerForm$1.strtpl(msg, data);
   }
   /**
    * patch String.length to account for non-BMP characters
@@ -3114,7 +3331,9 @@ class EagerForm {
   /**
    * Clear errors from an element
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement} element
+   *
+   * @return void
    */
 
 
@@ -3131,7 +3350,7 @@ class EagerForm {
       let feedBackElement = parent.querySelector(this.options.invalidFeedbackSelector); // Clear any invalid feedback
 
       if (feedBackElement) {
-        feedBackElement.textContent = "";
+        feedBackElement.textContent = '';
       } // Clear validation status from same named inputs (usually checkboxes/radios)
 
 
@@ -3155,7 +3374,9 @@ class EagerForm {
   /**
    * Clear all kinds of validation state including classes and text feedback from an input element
    *
-   * @param  {Object} element
+   * @param  {HTMLFormElement} element
+   *
+   * @return void
    */
 
 
@@ -3171,7 +3392,7 @@ class EagerForm {
       let feedBackElement = parent.querySelector(this.options.invalidFeedbackSelector); // Clear any invalid feedback
 
       if (feedBackElement) {
-        feedBackElement.textContent = "";
+        feedBackElement.textContent = '';
       }
     }
   }
@@ -3179,6 +3400,7 @@ class EagerForm {
    * Restore a form to it's original state by removing all validation classes and messages.
    * While keeping all the values, just remove the state
    *
+   * @return void
    */
 
 
@@ -3198,10 +3420,14 @@ class EagerForm {
    *
    * The event listeners are removed, and the EagerForm property is removed from the form
    * @param {Boolean} restore
+   *
+   * @return void
    */
 
 
-  destroy(restore = true) {
+  destroy() {
+    let restore = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : true;
+
     if (restore) {
       this.restoreState();
     }
@@ -3212,8 +3438,9 @@ class EagerForm {
   /**
    * Find the parent element, if parent class is specified, use that, or simply return the parentNode
    *
-   * @param  {Object} element
-   * @return {Object}
+   * @param  {HTMLElement} element
+   *
+   * @return {ParentNode|HTMLElement}
    */
 
 
@@ -3235,17 +3462,41 @@ class EagerForm {
    * Translate a key
    *
    * @param  {String} key
-   * @param  {Mixed} fallback
+   * @param  {String|Object} fallback
    * @return {String}
    */
 
 
-  translate(key, fallback = null) {
-    if (EagerForm.messages[this.options.locale][key]) {
-      return EagerForm.messages[this.options.locale][key];
+  translate(key) {
+    let fallback = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
+
+    if (EagerForm$1.messages[this.options.locale][key]) {
+      return EagerForm$1.messages[this.options.locale][key];
     }
 
     return fallback;
+  }
+  /**
+   * Translate numeric digits using a loop
+   *
+   * @param      {String|Null|Number}  string  The string
+   * @return     {String}
+   */
+
+
+  translateNumbers(string) {
+    if (string === undefined || string === null) {
+      return string;
+    }
+
+    string = string.toString();
+    const numbers = this.translate('numbers', {});
+
+    for (let x in numbers) {
+      string = string.replace(new RegExp(x, 'g'), numbers[x]);
+    }
+
+    return string;
   }
   /**
    * Perform basic string templating
@@ -3262,30 +3513,30 @@ class EagerForm {
         return replacements[contents];
       }
 
-      return "";
+      return '';
     });
     return text;
   }
 
 } // Register default locale
 
-_defineProperty(EagerForm, "version", '1.0.3');
+_defineProperty(EagerForm$1, "version", '1.0.5');
 
-_defineProperty(EagerForm, "RULE_PREFIX", "eager");
+_defineProperty(EagerForm$1, "RULE_PREFIX", 'eager');
 
-_defineProperty(EagerForm, "rules", {});
+_defineProperty(EagerForm$1, "rules", {});
 
-_defineProperty(EagerForm, "messages", {});
+_defineProperty(EagerForm$1, "messages", {});
 
-_defineProperty(EagerForm, "reservedWords", ['error', 'debounce', 'delay']);
+_defineProperty(EagerForm$1, "reservedWords", ['error', 'debounce', 'delay']);
 
-_defineProperty(EagerForm, "defaultOptions", {
-  locale: "en",
+_defineProperty(EagerForm$1, "defaultOptions", {
+  locale: 'en',
   showSuccessState: true,
   autoScroll: true,
   focusFirstError: true,
   offsetFocus: 50,
-  revalidate: ["blur", "change", "keyup"],
+  revalidate: ['blur', 'change', 'input'],
   noTriggerOnTab: true,
   delay: {},
   debounce: {
@@ -3296,24 +3547,25 @@ _defineProperty(EagerForm, "defaultOptions", {
   disableSubmit: true,
   captureReset: true,
   parentSelector: null,
-  invalidFeedbackName: "div",
-  invalidFeedbackPosition: "afterend",
-  invalidFeedbackSelector: ".invalid-feedback",
+  invalidFeedbackName: 'div',
+  invalidFeedbackPosition: 'afterend',
+  invalidFeedbackSelector: '.invalid-feedback',
+  changedAttribute: 'eager-changed',
   classes: {
-    formValidatedClass: "was-validated",
-    inputValidClass: "is-valid",
-    inputInvalidClass: "is-invalid",
-    parentValidClass: "has-valid-input",
-    parentInvalidClass: "has-invalid-input",
-    invalidFeedbackClass: "invalid-feedback",
-    disabled: "disabled"
+    formValidatedClass: 'was-validated',
+    inputValidClass: 'is-valid',
+    inputInvalidClass: 'is-invalid',
+    parentValidClass: 'has-valid-input',
+    parentInvalidClass: 'has-invalid-input',
+    invalidFeedbackClass: 'invalid-feedback',
+    disabled: 'disabled'
   }
 });
 
-EagerForm.addLocale("en", enLocale); // Register default rules
+EagerForm$1.addLocale('en', enLocale); // Register default rules
 
-EagerForm.rule("match", matchRule);
-EagerForm.rule("reference", referenceRule);
-EagerForm.rule("remote", remoteRule);
+EagerForm$1.rule('match', matchRule);
+EagerForm$1.rule('reference', referenceRule);
+EagerForm$1.rule('remote', remoteRule);
 
-export default EagerForm;
+export default EagerForm$1;

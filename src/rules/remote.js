@@ -8,13 +8,21 @@
  * @param  {String} attribute
  * @return {Promise}
  */
+/** @this EagerForm */
 export default function (element, attribute) {
+
   let endpoint = decodeURIComponent(element
     .getAttribute(attribute))
     .replace("{value}", element.value);
 
   let reverse =
-    element.getAttribute(`${attribute}-reverse`) == "true" ? true : false;
+    element.getAttribute(`${attribute}-reverse`) === "true";
+
+  let busyAttr = `data-${EagerForm.RULE_PREFIX}-remote-busy`;
+
+  let parent = this.findParent(element);
+
+  parent.setAttribute(busyAttr, 'true');
 
   let name = `__remote_request_${element.id}`;
 
@@ -40,26 +48,28 @@ export default function (element, attribute) {
     options = { ...options, ...customOptions };
   }
 
-  // Abort pending requests before staring new ones
+  // Abort pending requests before starting new ones
   if (this[name].readyState > 0 && this[name].readyState < 4) {
     this[name].abort();
   }
 
-  var xhr = this[name];
+  const xhr = this[name];
   xhr.open(options.method, endpoint);
 
   for (const key in options.headers) {
     xhr.setRequestHeader(key, options.headers[key]);
   }
 
-  var msg = this.translate("remoteInvalid");
+  const msg = this.translate('remoteInvalid');
 
   return new Promise((resolve, reject) => {
     xhr.onload = function () {
-      let success = this.status == 200;
+      let success = this.status === 200;
       if (reverse) {
         success = !success;
       }
+
+      parent.setAttribute(busyAttr, 'false');
 
       if (success) {
         resolve();

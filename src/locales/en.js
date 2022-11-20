@@ -17,4 +17,16 @@ export default {
   stepMismatch: "Please provide a valid value",
   remoteInvalid: "The field doesn't pass remote validation.",
   valueNotEqual: "The values don't match",
+  numbers: {
+    '0': '0',
+    '1': '1',
+    '2': '2',
+    '3': '3',
+    '4': '4',
+    '5': '5',
+    '6': '6',
+    '7': '7',
+    '8': '8',
+    '9': '9',
+  },
 };

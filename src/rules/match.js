@@ -1,6 +1,7 @@
+/** @this EagerForm */
 export default function (element, attribute) {
   let msg = this.translate("valueNotEqual");
-  
+
   return new Promise((resolve, reject) => {
     if (
       element.value ===
