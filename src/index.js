@@ -333,7 +333,7 @@ export default class EagerForm {
     this.validate();
 
     this.form.classList.add(this.options.classes.formValidatedClass);
-    
+
     const firstErrorElement = this.getFirstError();
 
     if (firstErrorElement) {
